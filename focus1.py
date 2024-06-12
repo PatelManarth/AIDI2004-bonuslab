@@ -2,7 +2,16 @@ import cv2
 import dlib
 import numpy as np
 
-def detect_gaze(frame, gray, landmarks):
+# Initialize the webcam
+cap = cv2.VideoCapture(0)
+
+# Load the pre-trained face detector
+detector = dlib.get_frontal_face_detector()
+
+# Load the pre-trained shape predictor
+predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
+
+def detect_gaze(landmarks, gray, frame):
     left_eye_region = np.array([(landmarks.part(36).x, landmarks.part(36).y),
                                 (landmarks.part(37).x, landmarks.part(37).y),
                                 (landmarks.part(38).x, landmarks.part(38).y),
@@ -35,24 +44,29 @@ def detect_gaze(frame, gray, landmarks):
     else:
         return "Not Focused"
 
-def process_frame(frame):
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector(gray)
+def gen_frames():
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    for face in faces:
-        x, y, w, h = (face.left(), face.top(), face.width(), face.height())
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = detector(gray)
 
-        landmarks = predictor(gray, face)
-        gaze = detect_gaze(frame, gray, landmarks)
-        cv2.putText(frame, gaze, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        for face in faces:
+            x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            landmarks = predictor(gray, face)
 
-        for n in range(0, 68):
-            x = landmarks.part(n).x
-            y = landmarks.part(n).y
-            cv2.circle(frame, (x, y), 2, (0, 64, 100), -1)
+            for n in range(0, 68):
+                x = landmarks.part(n).x
+                y = landmarks.part(n).y
+                cv2.circle(frame, (x, y), 2, (0, 64, 100), -1)
 
-    return frame
+            gaze = detect_gaze(landmarks, gray, frame)
+            cv2.putText(frame, gaze, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
